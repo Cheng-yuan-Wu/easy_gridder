@@ -1,0 +1,10 @@
+﻿param,value
+Vop,0.52
+Jop,0.01959
+Pwire,1.00E-03
+Rsheet,1000
+w_min,0.0005
+h0,0
+h_scale,0.1
+L,5
+Pcontact,0.001
