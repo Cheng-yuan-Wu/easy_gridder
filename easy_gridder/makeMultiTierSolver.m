@@ -8,15 +8,22 @@ function mySolver = makeMultiTierSolver(Vop, Jop, Pwire, Pcontact, AspectRatio,.
         %      :       :
         %   Width_n Pitch_n]  %<this tier is the only one that interacts
         %                       with the underlying sheet material
+        GRIDDLER_SHADOWS = true;  % Use truncated bus bars?
                                         
         % If any wire widths are out of bounds, confine them to preset size
         % limits:
         v(:,1) = confine(v(:,1), wireLimits);
         
-%         v(1,2) = L;  % Lock in dimension values here
-        v = abs(vertcat([inf L], v));   % Slap that top level L right on thar
-                                        % disallow any negative numbers 
-                                        % (they're non-physical, but may result from optimizer)
+%         v(1,2) = L;  % Lock in some values here if desired
+
+        if GRIDDLER_SHADOWS
+            % Slap that top level L right on thar
+            % disallow any negative numbers 
+            % (they're non-physical, but may result from optimizer)
+            v = abs(vertcat([inf L-v(1, 2)], v)); %#ok<*UNRCH> 
+        else
+            v = abs(vertcat([inf L], v)); 
+        end
 
         % Hex and Square calculations are equivalent:
         if strcmp(geometry, 'squares')

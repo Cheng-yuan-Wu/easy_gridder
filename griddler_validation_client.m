@@ -1,10 +1,11 @@
+%% Initialize and clear the results cache for batch runs:
 clear;
-%% Result cache for batch runs:
 global gridResultsCells
 gridResultsCells = cell(0);
 %% System Material Constants
 % Set based on active layer, metal choice for grid lines, and grid contact
-% measurements
+% measurements. For Griddler validation, we take J_max_power from
+% simulation and Vop is the highest sheet voltage in the FEA.
 
 FILE = './recipes/griddler_val_5cm.csv';
 recipe = readtable(FILE);
@@ -19,14 +20,13 @@ L = recipe.value(8);
 
 Pcontact = recipe.value(9); %Ohm-cm^2
 
-%% Set Design Constraints
-
+% Set Design Constraints
 wireLimits = [w_min 10]; %cm, Allowed dimensions for the wires
 geometry = 'bars'; %From bars, hexes, squares, or triangles
 
 sheetFun = @(n) 1; %No sheet model: 100% transmission assumed
 
-%% Optimizer setup - take a best guess at grid geometry
+% Optimizer setup - take a best guess at grid geometry
 numTiers = 2;
 
 smallEnd = 2*min(wireLimits(:));  %cm
@@ -37,64 +37,148 @@ bigEnd = 0.1;  %cm
 iters = 500;
 gridSolver = makeMultiTierSolver (Vop, Jop, Pwire, Pcontact, AspectRatio,...
                                   L, Psheet, geometry, sheetFun, wireLimits);
-optimum_v = solverSampler(gridSolver, iters, numTiers, smallEnd, bigEnd);
+% Carry this measurement vector through the rest of the problem
+V = solverSampler(gridSolver, iters, numTiers, smallEnd, bigEnd);
 
 disp('Best design identified:')
 disp('Width[cm]  Pitch[cm]')
-disp(optimum_v)
+disp(V)
 
-%% Parse Result
+% Parse Result
 display = true;
 saveResults = true;
-power_loss = gridSolver(optimum_v, display, saveResults);
+power_loss = gridSolver(V, display, saveResults);
 power = Jop * Vop * (1 - power_loss);
 
+disp('Power loss fraction: ' + string(power_loss))
 disp('Power output [mW/cm2]:  ' + string(1e3 * power))
-if saveResults
-    xlswrite([datestr(now(), 'HHMMSS') '.xlsx'], gridResultsCells);
-end
+% if saveResults
+%     xlswrite([datestr(now(), 'HHMMSS') '.xlsx'], gridResultsCells);
+% end
 
-%% Calculate the corresponding Griddler simulation values
+% Calculate the Griddler simulation values to recreate this design.
 % Use single bus bar, single probe point, square wafer, dual print, and no
 % finger end joining or gap
 % 
-% Diode characteristics:
+% Typical mono-Si cell characteristics:
 % 1-sun current of 25 mA/cm2
 % J01 450 fA/cm2
 % J02 10 nA/cm2
 
 params = {'wafer length', L;  %cm
-    'wafer width', optimum_v(1, 2);  %cm
-    'busbar width', optimum_v(1, 1) * 10;  %mm
-    'no fingers', wafer_width/optimum_v(2, 2);
-    'finger width', optimum_v(2, 1) * 1e4;  %um
-    'finger mohm/sq', 1e3 * Pwire / (optimum_v(2, 1) * AspectRatio); %mohm/sq
-    'bus mohm/sq', 1e3 * Pwire / (optimum_v(1, 1) * AspectRatio); %mohm/sq
+    'wafer width', V(1, 2);  %cm
+    'busbar width', V(1, 1) * 10;  %mm
+    'no fingers', V(1, 2)/V(2, 2);
+    'finger width', V(2, 1) * 1e4;  %um
+    'finger mohm/sq', 1e3 * Pwire / (V(2, 1) * AspectRatio); %mohm/sq
+    'bus mohm/sq', 1e3 * Pwire / (V(1, 1) * AspectRatio); %mohm/sq
     'finger contact res', 1e3 * Pcontact;  %mohm-cm2
     'layer sheet res', Psheet}  %#ok<*NOPTS> %ohm/sq
 
 %% Manually-determined geometry and operating conditions
-Vmp = 0.560;
-Jmp = 0.0196;
-target_power = 10.192e-3;
-v = [0.0832 0.6669;
-     0.0053 0.6669/8];
+num_fingers = 10
+Vmp = 0.519;   % V max power from griddler
+Jmp = 0.01959;  % J max power from griddler
+target_power = Vmp * Jmp;  %mohm/cm2
+V(2, 2) = V(1, 2) / num_fingers
+V0 = V;   % Save this optimal geometry - return at the start of each
 
 % Equivalent sim parameters
 params = {'wafer length', L;  %cm
-    'wafer width', v(1, 2);  %cm
-    'busbar width', v(1, 1) * 10;  %mm
-    'no fingers', wafer_width/v(2, 2);
-    'finger width', v(2, 1) * 1e4;  %um
-    'finger mohm/sq', 1e3 * Pwire / (v(2, 1) * AspectRatio); %mohm/sq
-    'bus mohm/sq', 1e3 * Pwire / (v(1, 1) * AspectRatio); %mohm/sq
+    'wafer width', V(1, 2);  %cm
+    'busbar width', V(1, 1) * 10;  %mm
+    'no fingers', V(1, 2)/V(2, 2);
+    'finger width', V(2, 1) * 1e4;  %um
+    'finger mohm/sq', 1e3 * Pwire / (V(2, 1) * AspectRatio); %mohm/sq
+    'bus mohm/sq', 1e3 * Pwire / (V(1, 1) * AspectRatio); %mohm/sq
     'finger contact res', 1e3 * Pcontact;  %mohm-cm2
     'layer sheet res', Psheet}  %ohm/sq
 
-power_loss = gridSolver(v, true, false);
+power_loss = gridSolver(V, true, false);
 power = Jmp * Vmp * (1 - power_loss);
-factor_adjustment = target_power/power;
+factor_adjustment = target_power/power;  % Carry this factor to the next section
 disp('Power output [mW/cm2]:  ' + string(1e3 * power))
-disp('Adjusted output [mW/cm2]:  ' + string(1e3 * power * factor_adjustment))
+disp('Tuned output [mW/cm2]:  ' + string(1e3 * power * factor_adjustment))
 
-%% Sweep
+%% Sweep line pitches
+V = V0;
+n = [4 6 8 9 10 12 14 17 20];
+pitches = V(1,2)./n
+
+for p = pitches
+    disp('>>>>>>>>>>>>')
+    disp('Pitch: ' + string(p))
+    V(2,2) = p;
+    power_loss = gridSolver(V, false, false);
+    power = Jmp * Vmp * (1 - power_loss) * factor_adjustment;
+    disp('power:  ' + string(power * 1e3))
+    
+    % Equivalent sim parameters
+    params = {'wafer length', L;  %cm
+        'wafer width', V(1, 2);  %cm
+        'busbar width', V(1, 1) * 10;  %mm
+        'no fingers', V(1, 2)/V(2, 2);
+        'finger width', V(2, 1) * 1e4;  %um
+        'finger mohm/sq', 1e3 * Pwire / (V(2, 1) * AspectRatio); %mohm/sq
+        'bus mohm/sq', 1e3 * Pwire / (V(1, 1) * AspectRatio); %mohm/sq
+        'finger contact res', 1e3 * Pcontact;  %mohm-cm2
+        'layer sheet res', Psheet}  %ohm/sq
+    disp('>>>>>>>>>>>>')
+end
+
+%% High-resolution pitch sweep
+V = V0;
+n = linspace(3, 21);
+pitches = V(1,2)./n;
+result = zeros(100, 2);
+result(:, 1) = pitches;
+i = 1;
+
+for p = pitches
+    V(2,2) = p;
+    power_loss = gridSolver(V, false, false);
+    power = Jmp * Vmp * (1 - power_loss) * factor_adjustment;
+    result(i, 2) = power;
+    i = i + 1;
+end
+
+%% Sweep line widths
+V = V0;
+widths = [30 40 50 60 63 65 75 85 95 105 115] .* 1e-4;
+
+for w = widths
+    disp('>>>>>>>>>>>>')
+    disp('Width: ' + string(w) + ' cm')
+    V(2, 1) = w;
+    power_loss = gridSolver(V, false, false);
+    power = Jmp * Vmp * (1 - power_loss) * factor_adjustment;
+    disp('power:  ' + string(power * 1e3))
+    
+    % Equivalent sim parameters
+    params = {
+        'finger width', V(2, 1) * 1e4;  %um
+        'finger mohm/sq', 1e3 * Pwire / (V(2, 1) * AspectRatio); %mohm/sq
+        'wafer length', L;  %cm
+        'wafer width', V(1, 2);  %cm
+        'busbar width', V(1, 1) * 10;  %mm
+        'no fingers', V(1, 2)/V(2, 2);
+        'bus mohm/sq', 1e3 * Pwire / (V(1, 1) * AspectRatio); %mohm/sq
+        'finger contact res', 1e3 * Pcontact;  %mohm-cm2
+        'layer sheet res', Psheet}  %ohm/sq
+    disp('>>>>>>>>>>>>')
+end
+
+%% High-resolution width sweep
+V = V0;
+widths = linspace(25, 120) .* 1e-4;
+result = zeros(100, 2);
+result(:, 1) = widths;
+i = 1;
+
+for w = widths
+    V(2, 1) = w;
+    power_loss = gridSolver(V, false, false);
+    power = Jmp * Vmp * (1 - power_loss) * factor_adjustment;
+    result(i, 2) = power;
+    i = i + 1;
+end

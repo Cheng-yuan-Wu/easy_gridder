@@ -4,6 +4,8 @@
 % straight-line grid geometries for each combination of size and
 % resistance.
 
+% TODO simplify me
+
 clear;
 %% Results cache for batch runs. Examine this variable later to extract results:
 global gridResultsCells
