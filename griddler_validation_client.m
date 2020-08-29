@@ -7,7 +7,7 @@ gridResultsCells = cell(0);
 % measurements. For Griddler validation, we take J_max_power from
 % simulation and Vop is the highest sheet voltage in the FEA.
 
-FILE = './recipes/griddler_val_5cm.csv';
+FILE = './recipes/griddler_val_20cm.csv';
 recipe = readtable(FILE);
 
 Vop = recipe.value(1);
@@ -76,9 +76,9 @@ params = {'wafer length', L;  %cm
     'layer sheet res', Psheet}  %#ok<*NOPTS> %ohm/sq
 
 %% Manually-determined geometry and operating conditions
-num_fingers = 10
-Vmp = 0.519;   % V max power from griddler
-Jmp = 0.01959;  % J max power from griddler
+num_fingers = 19   % Take a rounded value from the optimization run
+Vmp = 0.499;   % V max power from griddler
+Jmp = 0.01683;  % J max power from griddler
 target_power = Vmp * Jmp;  %mohm/cm2
 V(2, 2) = V(1, 2) / num_fingers
 V0 = V;   % Save this optimal geometry - return at the start of each
@@ -102,7 +102,7 @@ disp('Tuned output [mW/cm2]:  ' + string(1e3 * power * factor_adjustment))
 
 %% Sweep line pitches
 V = V0;
-n = [4 6 8 9 10 12 14 17 20];
+n = [10 12 14 16 18 19 20 25 30 35 40];
 pitches = V(1,2)./n
 
 for p = pitches
@@ -128,7 +128,7 @@ end
 
 %% High-resolution pitch sweep
 V = V0;
-n = linspace(3, 21);
+n = linspace(9.5, 41);
 pitches = V(1,2)./n;
 result = zeros(100, 2);
 result(:, 1) = pitches;
@@ -144,7 +144,7 @@ end
 
 %% Sweep line widths
 V = V0;
-widths = [30 40 50 60 63 65 75 85 95 105 115] .* 1e-4;
+widths = [70 90 110 130 145 147 150 170 200 250 300] .* 1e-4;
 
 for w = widths
     disp('>>>>>>>>>>>>')
@@ -170,7 +170,7 @@ end
 
 %% High-resolution width sweep
 V = V0;
-widths = linspace(25, 120) .* 1e-4;
+widths = linspace(65, 310) .* 1e-4;
 result = zeros(100, 2);
 result(:, 1) = widths;
 i = 1;

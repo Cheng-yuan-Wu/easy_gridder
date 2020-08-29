@@ -2,3 +2,6 @@
 *.mex*
 slprj/
 .autosave
+data/
+.ipynb_checkpoints/
+.png
