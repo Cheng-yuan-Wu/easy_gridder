@@ -32,8 +32,9 @@ smallEnd = 2e-4;  %cm. Custom value since we overwrote the wire minimum
 bigEnd = 0.1;  %cm
 
 %% Solve
-iters = 200;
-sheet_resistances = 10.^linspace(-2, 5, 29);
+iters = 2000;
+sheet_resistances = 10.^linspace(0, 6, 20);
+sheet_resistances = 10;
 
 for Psheet = sheet_resistances
     gridSolver = makeMultiTierSolver (Vop, Jop, Pwire, Pcontact,...
